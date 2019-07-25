@@ -1,2 +1,8 @@
 # dataStructures
-Implementation of generic data structure
+Implementation of generic data structures.
+
+currently available:
+
+Trees:
+
+AVL.
