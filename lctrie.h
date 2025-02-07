@@ -56,10 +56,9 @@ Value trie_lookup_ip(Trie* trie, uint32 ip);
 Value trie_lookup_ip_top_subnet(Trie* trie, uint32 ip);
 Value trie_lookup_ip_buttom_subnet(Trie* trie, uint32 ip);
 
-bool trie_insert_subnet(Trie* trie, uint32 ip, int mask, Value value);
-bool trie_remove_subnet(Trie* trie, uint32 ip, int mask, Value value);
-Value trie_lookup_subnet(Trie* trie, uint32 ip, int mask);
-
+bool trie_insert_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits, Value value);
+bool trie_remove_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
+Value trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 
 // Debugging functions
 
