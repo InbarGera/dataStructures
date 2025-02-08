@@ -4,16 +4,18 @@
 
 #include "./lctrie.h"
 
+#define FIRST_BIT_ON 0x80000000
+#define FIRST_TWO_BITS_ON 0xc0000000
+
 typedef struct Node {
     Value value;
     struct Node* zero;
     struct Node* one;
 } Node;
 
-
-typedef struct Trie {
+struct Trie {
     Node root;
-} Trie;
+};
 
 static void
 init_node(Node* node) {
@@ -74,7 +76,7 @@ trie_insert_ip(Trie* trie, uint32 ip, int value) {
     Node* node;
     uint32 mask;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
 
     for (; mask; mask >>= 1) {
@@ -113,7 +115,7 @@ shrink_path(Node** nodes, int num_nodes) {
     for (i = num_nodes - 1; i > 0; i--) {
         current_node = nodes[i];
 
-        // Should keep node if it is a subnet, or if it has 2 children
+        /* Should keep node if it is a subnet, or if it has 2 children */
         should_keep_current_node = current_node->value != 0 || (current_node->zero != NULL && current_node->one != NULL);
         
         if (should_keep_current_node) {    
@@ -141,7 +143,7 @@ trie_remove_ip(Trie* trie, uint32 ip) {
     int i;
     uint32 mask;
     
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     nodes[0] = &trie->root;
     for (i = 0; mask; i++, mask >>= 1) {
         current_node = nodes[i];
@@ -169,7 +171,7 @@ trie_lookup_ip(Trie* trie, uint32 ip) {
     Node* node;
     uint32 mask;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
 
     for (; mask; mask >>= 1) {
@@ -194,7 +196,7 @@ trie_lookup_ip_top_subnet(Trie* trie, uint32 ip) {
     Node* node;
     uint32 mask;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
 
     for (; mask; mask >>= 1) {
@@ -224,7 +226,7 @@ trie_lookup_ip_buttom_subnet(Trie* trie, uint32 ip) {
     uint32 mask;
     Value last_seen_subnet_value;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
     last_seen_subnet_value = 0;
 
@@ -255,7 +257,7 @@ trie_insert_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits, Value value)
     uint32 mask;
     int i;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
 
     if (subnet_bits > 31) {
@@ -299,7 +301,7 @@ trie_remove_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits) {
         return 0;
     }
     
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     nodes[0] = &trie->root;
     for (i = 0; i < subnet_bits; i++, mask >>= 1) {
         current_node = nodes[i];
@@ -319,14 +321,14 @@ trie_remove_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits) {
 
     current_node = nodes[i];
     
-    // Not a subnet
+    /* not a subnet */
     if (current_node->value == 0) {
         return 0;
     }
 
     current_node->value = 0;
 
-    // Try to remove the subnet
+    /* Try to remove the subnet */
     if (current_node->zero == NULL && current_node->one == NULL) {
         shrink_path(nodes, subnet_bits);
     }
@@ -340,7 +342,7 @@ trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits) {
     uint32 mask;
     int i;
 
-    mask = 0b10000000000000000000000000000000;
+    mask = FIRST_BIT_ON;
     node = &trie->root;
 
     if (subnet_bits > 31) {
@@ -365,7 +367,7 @@ trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits) {
 }
 
 
-// Debugging functions
+/* Debugging functions */
 
 static void
 print_ident(int ident) {
@@ -439,7 +441,7 @@ print_all_subnets(Trie* trie) {
 }
 
 
-// LcTrie with 2 bits per node
+/* LcTrie with 2 bits per node */
 
 typedef struct Node2 {
     Value value;
@@ -450,9 +452,9 @@ typedef struct Node2 {
 } Node2;
 
 
-typedef struct LcTrie2 {
+struct LcTrie2 {
     Node2 root;
-} LcTrie2;
+};
 
 static void
 init_node2(Node2* node) {
@@ -524,7 +526,7 @@ lctri2_insert_ip(LcTrie2* trie, uint32 ip, Value value) {
     int required_shift;
     unsigned int next_two_bits;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     required_shift = 30;
     node = &trie->root;
 
@@ -541,6 +543,8 @@ lctri2_insert_ip(LcTrie2* trie, uint32 ip, Value value) {
     }
 
     node->value = value;
+
+    return 1;
 }
 
 static void
@@ -555,7 +559,7 @@ shrink_path_with_2_bits(Node2** nodes, int num_nodes) {
     for (i = num_nodes - 1; i > 0; i--) {
         current_node = nodes[i];
 
-        // Should keep node if it is a subnet (or direct subnet under it), or if it has more than 1 child
+        /* Should keep node if it is a subnet (or direct subnet under it), or if it has more than 1 child */
         num_children = 0;
         for (j = 0; j < 4; j++) {
             if (current_node->next_nodes[j] != NULL) {
@@ -591,7 +595,7 @@ lctri2_remove_ip(LcTrie2* trie, uint32 ip) {
     int required_shift;
     unsigned int next_two_bits;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     required_shift = 30;
     nodes[0] = &trie->root;
     for (i = 1; mask; i++, mask >>= 2, required_shift -= 2) {
@@ -614,7 +618,7 @@ lctri2_lookup_ip(LcTrie2* trie, uint32 ip) {
     int required_shift;
     unsigned int next_two_bits;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     required_shift = 30;
     node = &trie->root;
 
@@ -636,10 +640,8 @@ lctri2_lookup_ip_top_subnet(LcTrie2* trie, uint32 ip) {
     int required_shift;
     unsigned int next_two_bits;
     unsigned int next_bit;
-    
-    int j;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     required_shift = 30;
     node = &trie->root;
 
@@ -652,7 +654,7 @@ lctri2_lookup_ip_top_subnet(LcTrie2* trie, uint32 ip) {
         
         next_bit = next_two_bits >> 1;
         
-        // TODO - store subnets in a way that enables faster lookup
+        /* TODO - store subnets in a way that enables faster lookup */
         if (next_bit == 1 && node->one_value != 0) {
             return node->one_value;
         }
@@ -679,9 +681,8 @@ lctri2_lookup_ip_buttom_subnet(LcTrie2* trie, uint32 ip) {
     unsigned int next_two_bits;
     unsigned int next_bit;
     Value last_seen_subnet_value;
-    int j;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     required_shift = 30;
     node = &trie->root;
     last_seen_subnet_value = 0;
@@ -715,15 +716,16 @@ lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value v
     uint32 mask;
     int i;
     unsigned int next_two_bits;
+    int next_upper_bit;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     node = &trie->root;
 
     if (subnet_bits > 31) {
         return 0;
     }
 
-    // Runnin until hitting the father of the node(s) to assign
+    /* Runnin until hitting the father of the node(s) to assign */
     for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
         next_two_bits = (ip & mask) >> (30 - i);
         if (node->next_nodes[next_two_bits] == NULL) {
@@ -736,12 +738,11 @@ lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value v
         node = node->next_nodes[next_two_bits];
     }
 
-    // Last iteration is done here:
-    // in case we need to assign more that one node due to subnet that is not aligned with 2 bits
+    /* Last iteration is done here:
+       in case we need to assign more that one node due to subnet that is not aligned with 2 bits
+     */
     
-    // Case of single node to assign 
-
-
+     /* Case of single node to assign  */
     if (i + 2 == subnet_bits) {
         next_two_bits = (ip & mask) >> (30 - i);
         if (node->next_nodes[next_two_bits] == NULL) {
@@ -756,10 +757,9 @@ lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value v
     }
 
 
-    // Case of subnet in the middle, assign to the father node in propper place
+    /* Case of subnet in the middle, assign to the father node in propper place */
 
-    int bits_to_check[2];
-    int next_upper_bit = (ip & mask) >> (31 - i); // One more than the regular iteration
+    next_upper_bit = (ip & mask) >> (31 - i); /* One more than the regular iteration */
 
     if (next_upper_bit == 0) {
         node->zero_value = value;
@@ -784,7 +784,7 @@ lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
         return 0;
     }
     
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     nodes[0] = &trie->root;
     for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
         next_two_bits = (ip & mask) >> (30 - i);
@@ -833,7 +833,7 @@ lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
         }
     }
 
-    // Try to remove the subnet
+    /* Try to remove the subnet */
     if (node_to_remove_subnet_from->value == 0 &&
         node_to_remove_subnet_from->zero_value == 0 &&
         node_to_remove_subnet_from->one_value == 0 &&
@@ -844,6 +844,8 @@ lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
         
         shrink_path_with_2_bits(nodes, i >> 1);
     }
+
+    return 1;
 }
 
 Value
@@ -853,7 +855,7 @@ lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
     int i;
     unsigned int next_two_bits;
 
-    mask = 0b11000000000000000000000000000000;
+    mask = FIRST_TWO_BITS_ON;
     node = &trie->root;
 
     if (subnet_bits > 31) {
@@ -886,7 +888,7 @@ lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
 }
 
 
-// Debugging functions
+/* Debugging functions */
 
 static void
 print_node2(Node2* node, int depth, int bit) {
@@ -937,7 +939,6 @@ print_all_lctrie2_ips(LcTrie2* trie) {
 static void
 print_all_lctrie2_subnets_internal(Node2* node, uint32 ip, int depth) {
     uint32 ip_to_print;
-    int i;
 
     if (node == NULL || depth == 32) {
         return;

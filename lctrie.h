@@ -4,16 +4,22 @@
 #ifndef LCTRIE_H
 #define LCTRIE_H
 
+#include <limits.h>
+
 #if defined(__STDC_VERSION__) && __STDC_VERSION__ >= 199901L
     #define HAS_C99 1
 #else
     #define HAS_C99 0
 #endif
 
-typedef unsigned char bool;
+#ifndef __cplusplus
+    typedef unsigned char bool;
+    #define true 1
+    #define false 0
+#endif
 
 #ifndef NULL
-    #define NULL 0
+    #define NULL ((void*)0)
 #endif
 
 #if HAS_C99
@@ -21,11 +27,11 @@ typedef unsigned char bool;
     typedef uint32_t uint32;    
 #else
 
-    #if (UINT_MAX == 4294967295U)
+    #if (UINT_MAX == 4294967295)
         typedef unsigned int uint32;
-    #elif (ULONG_MAX == 4294967295U)
+    #elif (ULONG_MAX == 4294967295)
         typedef unsigned long uint32;
-    #elif (USHORT_MAX == 4294967295U)
+    #elif (USHRT_MAX == 4294967295)
         typedef unsigned short uint32;
     #else
         #error "Cannot find 32-bit integer type"
@@ -36,7 +42,7 @@ typedef int Value;
 
 typedef struct Trie Trie;
 
-// Regular ip trie
+/* Regular ip trie */
 Trie* alloc_trie();
 void free_trie(Trie* trie);
 
@@ -51,13 +57,13 @@ bool trie_insert_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits, Value v
 bool trie_remove_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 Value trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 
-// Debugging functions for ip trie
+/* Debugging functions for ip trie */
 
 void print_trie(Trie* trie);
 void print_all_ips(Trie* trie);
 void print_all_subnets(Trie* trie);
 
-// lctrie with 2 bits per node
+/* lctrie with 2 bits per node */
 
 typedef struct LcTrie2 LcTrie2;
 
@@ -75,11 +81,11 @@ bool lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Va
 bool lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
 Value lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
 
-// Debugging functions for lctrie with 2 bits per node
+/* Debugging functions for lctrie with 2 bits per node */
 
 void print_lctrie2(LcTrie2* trie);
 void print_all_lctrie2_ips(LcTrie2* trie);
 void print_all_lctrie2_subnets(LcTrie2* trie);
 
 
-#endif // LCTRIE_H
+#endif /* LCTRIE_H */
