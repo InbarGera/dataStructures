@@ -70,7 +70,10 @@ void print_all_subnets(Trie* trie);
 // lctrie with 2 bits per node
 
 typedef struct Node2 {
-    Value values [2];
+    Value value;
+    Value one_value;
+    Value zero_value;
+    
     struct Node2* next_nodes[4];
 } Node2;
 

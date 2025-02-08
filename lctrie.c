@@ -407,12 +407,14 @@ print_all_ips(Trie* trie) {
 
 static void
 print_all_subnets_internal(Node* node, uint32 ip, int depth) {
+    uint32 ip_to_print;
+
     if (node == NULL || depth == 32) {
         return;
     }
 
     if (node->value != 0) {
-        uint32 ip_to_print = ip << (32 - depth);
+        ip_to_print = ip << (32 - depth);
         printf("%d.%d.%d.%d/%d - %d\n", (ip_to_print >> 24) & 0xFF, (ip_to_print >> 16) & 0xFF, (ip_to_print >> 8) & 0xFF, ip_to_print & 0xFF, depth, node->value);
     }
     
@@ -430,8 +432,9 @@ print_all_subnets(Trie* trie) {
 
 static void
 init_node2(Node2* node) {
-    node->values[0] = 0;
-    node->values[1] = 0;
+    node->value = 0;
+    node->zero_value = 0;
+    node->one_value = 0;
     node->next_nodes[0] = NULL;
     node->next_nodes[1] = NULL;
     node->next_nodes[2] = NULL;
@@ -513,7 +516,7 @@ lctri2_insert_ip(LcTrie2* trie, uint32 ip, Value value) {
         node = node->next_nodes[next_two_bits];
     }
 
-    node->values[0] = value;
+    node->value = value;
 }
 
 static void
@@ -528,7 +531,7 @@ shrink_path_with_2_bits(Node2** nodes, int num_nodes) {
     for (i = num_nodes - 1; i > 0; i--) {
         current_node = nodes[i];
 
-        // Should keep node if it is a subnet, or if it has more than 1 child
+        // Should keep node if it is a subnet (or direct subnet under it), or if it has more than 1 child
         num_children = 0;
         for (j = 0; j < 4; j++) {
             if (current_node->next_nodes[j] != NULL) {
@@ -536,7 +539,7 @@ shrink_path_with_2_bits(Node2** nodes, int num_nodes) {
             }
         }
         
-        should_keep_current_node = current_node->values[0] != 0 || current_node->values[1] != 0;
+        should_keep_current_node = current_node->value != 0 || current_node->zero_value != 0 || current_node->one_value != 0;
         should_keep_current_node = should_keep_current_node || num_children > 1;
 
         if (should_keep_current_node) {    
@@ -599,23 +602,271 @@ lctri2_lookup_ip(LcTrie2* trie, uint32 ip) {
         }
     }
 
-    return node->values[0];
+    return node->value;
 }
 
+Value
+lctri2_lookup_ip_top_subnet(LcTrie2* trie, uint32 ip) {
+    Node2* node;
+    uint32 mask;
+    int required_shift;
+    unsigned int next_two_bits;
+    unsigned int next_bit;
+    
+    int j;
 
-Value lctri2_lookup_ip_top_subnet(LcTrie2* trie, uint32 ip);
-Value lctri2_lookup_ip_buttom_subnet(LcTrie2* trie, uint32 ip);
+    mask = 0b11000000000000000000000000000000;
+    required_shift = 30;
+    node = &trie->root;
 
-bool lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value value);
-bool lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
-Value lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
+    for (; node && mask; mask >>= 2, required_shift -= 2) {
+        if (node->value != 0) {
+            return node->value;
+        }
+
+        next_two_bits = (ip & mask) >> required_shift;
+        
+        next_bit = next_two_bits >> 1;
+        
+        // TODO - store subnets in a way that enables faster lookup
+        if (next_bit == 1 && node->one_value != 0) {
+            return node->one_value;
+        }
+
+        if (next_bit  == 0 && node->zero_value != 0) {
+            return node->zero_value;
+        }
+
+        if (node->value != 0) {
+            return node->value;
+        }
+        
+        node = node->next_nodes[next_two_bits];
+    }
+
+    return 0;
+}
+
+Value
+lctri2_lookup_ip_buttom_subnet(LcTrie2* trie, uint32 ip) {
+    Node2* node;
+    uint32 mask;
+    int required_shift;
+    unsigned int next_two_bits;
+    unsigned int next_bit;
+    Value last_seen_subnet_value;
+    int j;
+
+    mask = 0b11000000000000000000000000000000;
+    required_shift = 30;
+    node = &trie->root;
+    last_seen_subnet_value = 0;
+
+    for (; node && mask; mask >>= 2, required_shift -= 2) {
+        
+        if (node->value != 0) {
+            last_seen_subnet_value = node->value;
+        }
+
+        next_two_bits = (ip & mask) >> required_shift;
+        next_bit = next_two_bits >> 1;
+        
+        if (next_bit == 1 && node->one_value != 0) {
+            last_seen_subnet_value = node->one_value;
+        }
+
+        if (next_bit == 0 && node->zero_value != 0) {
+            last_seen_subnet_value = node->zero_value;
+        }
+
+        node = node->next_nodes[next_two_bits];
+    }
+
+    return last_seen_subnet_value;
+}
+
+bool
+lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value value) {
+    Node2* node;
+    uint32 mask;
+    int i;
+    unsigned int next_two_bits;
+
+    mask = 0b11000000000000000000000000000000;
+    node = &trie->root;
+
+    if (subnet_bits > 31) {
+        return 0;
+    }
+
+    // Runnin until hitting the father of the node(s) to assign
+    for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        if (node->next_nodes[next_two_bits] == NULL) {
+            node->next_nodes[next_two_bits] = alloc_node2();
+            if (node->next_nodes[next_two_bits] == NULL) {
+                return 0;
+            }
+        }
+
+        node = node->next_nodes[next_two_bits];
+    }
+
+    // Last iteration is done here:
+    // in case we need to assign more that one node due to subnet that is not aligned with 2 bits
+    
+    // Case of single node to assign 
+
+
+    if (i + 2 == subnet_bits) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        if (node->next_nodes[next_two_bits] == NULL) {
+            node->next_nodes[next_two_bits] = alloc_node2();
+            if (node->next_nodes[next_two_bits] == NULL) {
+                return 0;
+            }
+        }
+
+        node->next_nodes[next_two_bits]->value = value;
+        return 1;
+    }
+
+
+    // Case of subnet in the middle, assign to the father node in propper place
+
+    int bits_to_check[2];
+    int next_upper_bit = (ip & mask) >> (31 - i); // One more than the regular iteration
+
+    if (next_upper_bit == 0) {
+        node->zero_value = value;
+    } else {
+        node->one_value = value;
+    }
+
+    return 1;
+}
+
+bool
+lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
+    Node2* nodes[17];
+    Node2* current_node;
+    Node2* node_to_remove_subnet_from;
+    
+    int i;
+    uint32 mask;
+    unsigned int next_two_bits;
+
+    if (subnet_bits > 31) {
+        return 0;
+    }
+    
+    mask = 0b11000000000000000000000000000000;
+    nodes[0] = &trie->root;
+    for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        current_node = nodes[i >> 1];
+
+        if (current_node->next_nodes[next_two_bits] == NULL) {
+            return 0;
+        }
+
+        nodes[(i >> 1) + 1] = current_node->next_nodes[next_two_bits];
+    }
+
+    
+    if (i + 2 == subnet_bits) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        current_node = nodes[i >> 1];
+
+        node_to_remove_subnet_from = current_node->next_nodes[next_two_bits];
+        if (node_to_remove_subnet_from == NULL) {
+            return 0;
+        }
+
+        i += 2;
+
+        nodes[(i >> 1)] = node_to_remove_subnet_from;
+
+        node_to_remove_subnet_from->value = 0;
+    } else {
+
+        next_two_bits = (ip & mask) >> (30 - i);
+
+        node_to_remove_subnet_from = current_node->next_nodes[next_two_bits];
+
+        if (next_two_bits >> 1 == 0) {
+            if (node_to_remove_subnet_from->zero_value == 0) {
+                return 0;
+            }
+
+            node_to_remove_subnet_from->zero_value = 0;
+        } else {
+            if (node_to_remove_subnet_from->one_value == 0) {
+                return 0;
+            }
+
+            node_to_remove_subnet_from->one_value = 0;
+        }
+    }
+
+    // Try to remove the subnet
+    if (node_to_remove_subnet_from->value == 0 &&
+        node_to_remove_subnet_from->zero_value == 0 &&
+        node_to_remove_subnet_from->one_value == 0 &&
+        node_to_remove_subnet_from->next_nodes[0] == NULL &&
+        node_to_remove_subnet_from->next_nodes[1] == NULL &&
+        node_to_remove_subnet_from->next_nodes[2] == NULL &&
+        node_to_remove_subnet_from->next_nodes[3] == NULL) {
+        
+        shrink_path_with_2_bits(nodes, i >> 1);
+    }
+}
+
+Value
+lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
+    Node2* node;
+    uint32 mask;
+    int i;
+    unsigned int next_two_bits;
+
+    mask = 0b11000000000000000000000000000000;
+    node = &trie->root;
+
+    if (subnet_bits > 31) {
+        return 0;
+    }
+
+    for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        node = node->next_nodes[next_two_bits];
+        if (node == NULL) {
+            return 0;
+        }
+    }
+
+    if (i + 2 == subnet_bits) {
+        next_two_bits = (ip & mask) >> (30 - i);
+        node = node->next_nodes[next_two_bits];
+        if (node == NULL) {
+            return 0;
+        }
+
+        return node->value;
+    }
+
+    if (next_two_bits >> 1 == 0) {
+        return node->zero_value;
+    } else {
+        return node->one_value;
+    }
+}
 
 
 // Debugging functions
 
 static void
 print_node2(Node2* node, int depth, int bit) {
-    printf("%d ", depth);
+    printf("%d", depth);
     print_ident(depth);
     printf("bit %d%d : ", (bit >>1) %2, bit % 2);
     
@@ -624,7 +875,7 @@ print_node2(Node2* node, int depth, int bit) {
         return;
     }
 
-    printf("Values: %d, %d\n", node->values[0], node->values[1]);
+    printf("Value: %d, 0 value: %d, 1 value: %d\n", node->value, node->zero_value, node->one_value);
 
     print_node2(node->next_nodes[0], depth + 1, 0);
     print_node2(node->next_nodes[1], depth + 1, 1);
@@ -645,7 +896,7 @@ print_all_lctrie2_ips_internal(Node2* node, uint32 ip, int depth) {
     }
 
     if (depth == 16) {
-        printf("%d.%d.%d.%d - %d\n", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, node->values[0]);
+        printf("%d.%d.%d.%d - %d\n", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, node->value);
     }
 
     print_all_lctrie2_ips_internal(node->next_nodes[0], ip << 2, depth + 1);
@@ -659,5 +910,37 @@ print_all_lctrie2_ips(LcTrie2* trie) {
     print_all_lctrie2_ips_internal(&trie->root, 0, 0);    
 }
 
+static void
+print_all_lctrie2_subnets_internal(Node2* node, uint32 ip, int depth) {
+    uint32 ip_to_print;
+    int i;
 
-void print_all_lctrie2_subnets(LcTrie2* trie);
+    if (node == NULL || depth == 32) {
+        return;
+    }
+
+    if (node->value) {
+        ip_to_print = ip << (32 - depth);
+        printf("%d.%d.%d.%d/%d - %d\n", (ip_to_print >> 24) & 0xFF, (ip_to_print >> 16) & 0xFF, (ip_to_print >> 8) & 0xFF, ip_to_print & 0xFF, depth, node->value);
+    }
+
+    if(node->zero_value) {
+        ip_to_print = ip << (32 - depth);
+        printf("%d.%d.%d.%d/%d - %d\n", (ip_to_print >> 24) & 0xFF, (ip_to_print >> 16) & 0xFF, (ip_to_print >> 8) & 0xFF, ip_to_print & 0xFF, depth + 1, node->zero_value);
+    }
+
+    if(node->one_value) {
+        ip_to_print = ip << (32 - depth);
+        printf("%d.%d.%d.%d/%d - %d\n", (ip_to_print >> 24) & 0xFF, (ip_to_print >> 16) & 0xFF, (ip_to_print >> 8) & 0xFF, ip_to_print & 0xFF, depth + 1, node->one_value);
+    }
+
+    print_all_lctrie2_subnets_internal(node->next_nodes[0], ip << 2, depth + 2);
+    print_all_lctrie2_subnets_internal(node->next_nodes[1], (ip << 2) | 1, depth + 2);
+    print_all_lctrie2_subnets_internal(node->next_nodes[2], (ip << 2) | 2, depth + 2);
+    print_all_lctrie2_subnets_internal(node->next_nodes[3], (ip << 2) | 3, depth + 2);
+}
+
+void
+print_all_lctrie2_subnets(LcTrie2* trie) {
+    print_all_lctrie2_subnets_internal(&trie->root, 0, 0);    
+}
