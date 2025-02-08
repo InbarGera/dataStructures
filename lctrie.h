@@ -46,6 +46,7 @@ typedef struct Trie {
 } Trie;
 
 
+// Regular ip trie
 Trie* alloc_trie();
 void free_trie(Trie* trie);
 
@@ -60,10 +61,43 @@ bool trie_insert_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits, Value v
 bool trie_remove_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 Value trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 
-// Debugging functions
+// Debugging functions for ip trie
 
 void print_trie(Trie* trie);
 void print_all_ips(Trie* trie);
 void print_all_subnets(Trie* trie);
+
+// lctrie with 2 bits per node
+
+typedef struct Node2 {
+    Value values [2];
+    struct Node2* next_nodes[4];
+} Node2;
+
+
+typedef struct LcTrie2 {
+    Node2 root;
+} LcTrie2;
+
+LcTrie2* alloc_lctrie2();
+void free_trie2(LcTrie2* trie);
+
+bool lctri2_insert_ip(LcTrie2* trie, uint32 ip, Value value);
+bool lctri2_remove_ip(LcTrie2* trie, uint32 ip);
+
+Value lctri2_lookup_ip(LcTrie2* trie, uint32 ip);
+Value lctri2_lookup_ip_top_subnet(LcTrie2* trie, uint32 ip);
+Value lctri2_lookup_ip_buttom_subnet(LcTrie2* trie, uint32 ip);
+
+bool lctri2_insert_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits, Value value);
+bool lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
+Value lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits);
+
+// Debugging functions for lctrie with 2 bits per node
+
+void print_lctrie2(LcTrie2* trie);
+void print_all_lctrie2_ips(LcTrie2* trie);
+void print_all_lctrie2_subnets(LcTrie2* trie);
+
 
 #endif // LCTRIE_H
