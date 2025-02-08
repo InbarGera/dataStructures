@@ -63,5 +63,7 @@ Value trie_lookup_subnet(Trie* trie, uint32 ip, unsigned int subnet_bits);
 // Debugging functions
 
 void print_trie(Trie* trie);
+void print_all_ips(Trie* trie);
+void print_all_subnets(Trie* trie);
 
 #endif // LCTRIE_H

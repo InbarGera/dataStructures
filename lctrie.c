@@ -385,3 +385,42 @@ void
 print_trie(Trie* trie) {
     print_node(&trie->root, 0, 0);
 }
+
+static void
+print_all_ips_internal(Node* node, uint32 ip, int depth) {
+    if (node == NULL) {
+        return;
+    }
+
+    if (depth == 32) {
+        printf("%d.%d.%d.%d - %d\n", (ip >> 24) & 0xFF, (ip >> 16) & 0xFF, (ip >> 8) & 0xFF, ip & 0xFF, node->value);
+    }
+
+    print_all_ips_internal(node->zero, ip << 1, depth + 1);
+    print_all_ips_internal(node->one, (ip << 1) | 1, depth + 1);
+}
+
+void
+print_all_ips(Trie* trie) {
+    print_all_ips_internal(&trie->root, 0, 0);
+}
+
+static void
+print_all_subnets_internal(Node* node, uint32 ip, int depth) {
+    if (node == NULL || depth == 32) {
+        return;
+    }
+
+    if (node->value != 0) {
+        uint32 ip_to_print = ip << (32 - depth);
+        printf("%d.%d.%d.%d/%d - %d\n", (ip_to_print >> 24) & 0xFF, (ip_to_print >> 16) & 0xFF, (ip_to_print >> 8) & 0xFF, ip_to_print & 0xFF, depth, node->value);
+    }
+    
+    print_all_subnets_internal(node->zero, ip << 1, depth + 1);
+    print_all_subnets_internal(node->one, (ip << 1) | 1, depth + 1);
+}
+
+void
+print_all_subnets(Trie* trie) {
+    print_all_subnets_internal(&trie->root, 0, 0);
+}
