@@ -34,17 +34,7 @@ typedef unsigned char bool;
 
 typedef int Value;
 
-typedef struct Node {
-    Value value;
-    struct Node* zero;
-    struct Node* one;
-} Node;
-
-
-typedef struct Trie {
-    Node root;
-} Trie;
-
+typedef struct Trie Trie;
 
 // Regular ip trie
 Trie* alloc_trie();
@@ -69,18 +59,7 @@ void print_all_subnets(Trie* trie);
 
 // lctrie with 2 bits per node
 
-typedef struct Node2 {
-    Value value;
-    Value one_value;
-    Value zero_value;
-    
-    struct Node2* next_nodes[4];
-} Node2;
-
-
-typedef struct LcTrie2 {
-    Node2 root;
-} LcTrie2;
+typedef struct LcTrie2 LcTrie2;
 
 LcTrie2* alloc_lctrie2();
 void free_trie2(LcTrie2* trie);

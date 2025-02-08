@@ -4,6 +4,17 @@
 
 #include "./lctrie.h"
 
+typedef struct Node {
+    Value value;
+    struct Node* zero;
+    struct Node* one;
+} Node;
+
+
+typedef struct Trie {
+    Node root;
+} Trie;
+
 static void
 init_node(Node* node) {
     node->value = 0;
@@ -429,6 +440,19 @@ print_all_subnets(Trie* trie) {
 
 
 // LcTrie with 2 bits per node
+
+typedef struct Node2 {
+    Value value;
+    Value one_value;
+    Value zero_value;
+    
+    struct Node2* next_nodes[4];
+} Node2;
+
+
+typedef struct LcTrie2 {
+    Node2 root;
+} LcTrie2;
 
 static void
 init_node2(Node2* node) {
