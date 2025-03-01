@@ -24,7 +24,8 @@
 
 #if HAS_C99
     #include <stdint.h>
-    typedef uint32_t uint32;    
+    typedef uint32_t uint32;
+    typedef uint16_t uint16;
 #else
 
     #if (UINT_MAX == 4294967295)
@@ -35,6 +36,14 @@
         typedef unsigned short uint32;
     #else
         #error "Cannot find 32-bit integer type"
+    #endif
+
+    #if (UINT_MAX == 65535)
+        typedef unsigned int uint16;
+    #elif (USHRT_MAX == 65535)
+        typedef unsigned short uint16;
+    #else
+        #error "Cannot find 16-bit integer type"
     #endif
 #endif
 
@@ -87,5 +96,28 @@ void print_lctrie2(LcTrie2* trie);
 void print_all_lctrie2_ips(LcTrie2* trie);
 void print_all_lctrie2_subnets(LcTrie2* trie);
 
+/* lctrie with 4 bits per node */
+
+typedef struct LcTrie4 LcTrie4;
+
+LcTrie4* alloc_lctrie4();
+void free_trie4(LcTrie4* trie);
+
+bool lctri4_insert_ip(LcTrie4* trie, uint32 ip, Value value);
+bool lctri4_remove_ip(LcTrie4* trie, uint32 ip);
+
+Value lctri4_lookup_ip(LcTrie4* trie, uint32 ip);
+Value lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip);
+Value lctri4_lookup_ip_buttom_subnet(LcTrie4* trie, uint32 ip);
+
+bool lctri4_insert_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits, Value value);
+bool lctri4_remove_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits);
+Value lctri4_lookup_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits);
+
+/* Debugging functions for lctrie with 2 bits per node */
+
+void print_lctrie4(LcTrie4* trie);
+void print_all_lctrie4_ips(LcTrie4* trie);
+void print_all_lctrie4_subnets(LcTrie4* trie);
 
 #endif /* LCTRIE_H */
