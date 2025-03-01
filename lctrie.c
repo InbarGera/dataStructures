@@ -38,14 +38,48 @@ alloc_node() {
 
 static void
 free_node(Node* node) {
+    Node* nodes_stack[32];
+    short leaf_index_stack[32]; 
+
+    int leaf_index;
+    
     if (node == NULL) {
         return;
     }
 
-    free_node(node->zero);
-    free_node(node->one);
+    int stack_index = 0;
+    nodes_stack[stack_index] = node;
+    leaf_index_stack[stack_index] = 0;
 
-    free(node);
+    while(stack_index >= 0) {
+        node = nodes_stack[stack_index];
+        leaf_index = leaf_index_stack[stack_index];
+
+        if (leaf_index == 0) {
+            leaf_index_stack[stack_index] = leaf_index = 1;
+            if (node->zero != NULL) {
+                stack_index++;
+                nodes_stack[stack_index] = node->zero;
+                leaf_index_stack[stack_index] = 0;
+                continue;
+            }
+        }
+
+        if (leaf_index == 1) {
+            leaf_index_stack[stack_index] = 2;
+
+            if (node->one != NULL) {
+                stack_index++;
+                nodes_stack[stack_index] = node->one;
+                leaf_index_stack[stack_index] = 0;
+                continue;
+            }
+        }
+
+        // Leaf index is 2, done with current node
+        free(node);
+        stack_index--;
+    }
 }
 
 Trie*
@@ -481,16 +515,43 @@ alloc_node2() {
 
 static void
 free_node2(Node2* node) {
+    Node2* nodes_stack[16];
+    short leaf_index_stack[16]; 
+
+    int leaf_index;
+    int stack_index;
+
     if (node == NULL) {
         return;
     }
 
-    free_node2(node->next_nodes[0]);
-    free_node2(node->next_nodes[1]);
-    free_node2(node->next_nodes[2]);
-    free_node2(node->next_nodes[3]);
+    stack_index = 0;
+    nodes_stack[stack_index] = node;
+    leaf_index_stack[stack_index] = 0;
 
-    free(node);
+    while(stack_index >= 0) {
+        node = nodes_stack[stack_index];
+        leaf_index = leaf_index_stack[stack_index];
+
+        while (leaf_index < 4 && node->next_nodes[leaf_index] == NULL) {
+            leaf_index++;
+        }
+
+        if (leaf_index == 4) {
+            // Finished with current node, free it and go back to previous node
+            free(node);
+            stack_index--;
+            continue;
+        }
+
+        // Increment leaf index for next iteration
+        leaf_index_stack[stack_index] = leaf_index + 1;
+        
+        // Push next node to stack
+        stack_index++;
+        nodes_stack[stack_index] = node->next_nodes[leaf_index];
+        leaf_index_stack[stack_index] = 0;
+    }
 }
 
 LcTrie2*
