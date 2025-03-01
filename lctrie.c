@@ -43,12 +43,13 @@ free_node(Node* node) {
     short leaf_index_stack[32]; 
 
     int leaf_index;
+    int stack_index;
     
     if (node == NULL) {
         return;
     }
 
-    int stack_index = 0;
+    stack_index = 0;
     nodes_stack[stack_index] = node;
     leaf_index_stack[stack_index] = 0;
 
@@ -77,7 +78,7 @@ free_node(Node* node) {
             }
         }
 
-        // Leaf index is 2, done with current node
+        /* Leaf index is 2, done with current node */
         free(node);
         stack_index--;
     }
@@ -539,16 +540,16 @@ free_node2(Node2* node) {
         }
 
         if (leaf_index == 4) {
-            // Finished with current node, free it and go back to previous node
+            /* Finished with current node, free it and go back to previous node */
             free(node);
             stack_index--;
             continue;
         }
 
-        // Increment leaf index for next iteration
+        /* Increment leaf index for next iteration */
         leaf_index_stack[stack_index] = leaf_index + 1;
         
-        // Push next node to stack
+        /* Push next node to stack */
         stack_index++;
         nodes_stack[stack_index] = node->next_nodes[leaf_index];
         leaf_index_stack[stack_index] = 0;
@@ -847,7 +848,7 @@ lctri2_remove_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
     }
     
     mask = FIRST_TWO_BITS_ON;
-    nodes[0] = current_node = &trie->root; // Putting current_node here is required for subnet_bits == 1
+    nodes[0] = current_node = &trie->root; /* Putting current_node here is required for subnet_bits == 1 */
     for (i = 0; i + 2 < subnet_bits; i += 2, mask >>= 2) {
         next_two_bits = (ip & mask) >> (30 - i);
         current_node = nodes[i >> 1];
@@ -918,7 +919,7 @@ lctri2_lookup_subnet(LcTrie2* trie, uint32 ip, unsigned int subnet_bits) {
     unsigned int next_two_bits;
 
     mask = FIRST_TWO_BITS_ON;
-    next_two_bits = (ip & mask) >> 30; // This line is required for subnet_bits == 1
+    next_two_bits = (ip & mask) >> 30; /* This line is required for subnet_bits == 1 */
     node = &trie->root;
 
     if (subnet_bits > 31) {
@@ -1036,7 +1037,7 @@ print_all_lctrie2_subnets(LcTrie2* trie) {
 
 /* LcTrie with 4 bits per node */
 
-// Static class variables
+/* Static class variable */
 
 static uint16 LcTrie4_index_to_bit[16] = {
     0x0001, 0x0002, 0x0004, 0x0008,
@@ -1045,7 +1046,7 @@ static uint16 LcTrie4_index_to_bit[16] = {
     0x1000, 0x2000, 0x4000, 0x8000
 };
 
-// Static functions - implemented as macros for runtime efficiency
+/* Bit map manipulation and query functions - implemented as macros for runtime efficiency */
 
 #define IS_NODE_CHILDREN_ARE_LEAVES(node)   (!!(node->subnet_bits & 0x8000))
 #define IS_NODE_CHILDREN_ARE_NODES(node)    (! (node->subnet_bits & 0x8000))
@@ -1063,27 +1064,33 @@ static uint16 LcTrie4_index_to_bit[16] = {
 #define IS_ANY_SUBNET_BIT_SET(node)         (!!(node->subnet_bits & 0x7fff))
 #define IS_ANY_CHILD_BIT_SET(node)          (!!(node->chilren_bits))
 
+#define IS_ANY_CHILD_BIT_SET_EXCEPT(node, index) (!!(node->chilren_bits & ~(LcTrie4_index_to_bit[index])))
+
+
 typedef struct Node4 {
 
-    // Bitmap for subnets in this node, 1 means there is a subnet in this position
-    // There are 15 subnets (including one for this node)
-    // The last bit is used to indicate if this node childrens are leaves or nodes
-    uint16 subnet_bits;
+    /* 
+     * Bitmap for subnets in this node, 1 means there is a subnet in this position
+     * There are 15 subnets (including one for this node)
+     * The last bit is used to indicate if this node childrens are leaves or nodes
+     */
+     uint16 subnet_bits;
 
-    // Bitmap for children, 1 means there is a child in this position
+    /* Bitmap for children, 1 means there is a child in this position */
     uint16 chilren_bits;
 
-    Value subnet_values[15];
+    Value subnet_values[16];
 
-    // Ip node need only value, so istead of allocating one big node for it, just hold the value
-    // The last bit in subnet_bits bitmap indicating if this is a leaf or a node
-    union lctrie4_node {
+    /*
+     * Ip node need only value, so instead of allocating one big node for it, just hold the value
+     * The last bit in subnet_bits bitmap indicating if this is a leaf or a node
+     */
+     union lctrie4_node {
         struct Node4* node;
         Value leaf;
-    } next_nodes[15];
-    
-} Node4;
+    } next_nodes[16];
 
+} Node4;
 
 struct LcTrie4 {
     Node4 root;
@@ -1091,11 +1098,12 @@ struct LcTrie4 {
 
 static void
 init_node4(Node4* node) {
-    node->subnet_bits = 0; // This includes initializatoin for the union type - node
+    int i;
+    
+    node->subnet_bits = 0; /* This includes initializatoin for the union type - node */
     node->chilren_bits = 0;
 
-    int i;
-    for (i = 0; i < 15; i++) {
+    for (i = 0; i < 16; i++) {
         node->subnet_values[i] = 0;
         node->next_nodes[i].node = NULL;
     }
@@ -1134,27 +1142,27 @@ free_node4(Node4* node) {
         child_index = children_index_stack[stack_index];
 
         if (IS_NODE_CHILDREN_ARE_LEAVES(node)) {
-            // Finished with current node, as all of its children are leaves (ip's)
+            /* Finished with current node, as all of its children are leaves (ip's) */
             free(node);
             stack_index--;
             continue;
         }
 
-        while (child_index < 16 && node->next_nodes[child_index].node == NULL) {
+        while (child_index < 16 && !IS_NODE_CHILD_BIT_SET(node, child_index)) {
             child_index++;
         }
 
         if (child_index == 16) {
-            // Finished with current node, free it and go back to previous node
+            /* Finished with current node, free it and go back to previous node */
             free(node);
             stack_index--;
             continue;
         }
 
-        // Increment leaf index for next iteration
+        /* Increment leaf index for next iteration */
         children_index_stack[stack_index] = child_index + 1;
 
-        // Push next node to stack
+        /* Push next node to stack */
         stack_index++;
         nodes_stack[stack_index] = node->next_nodes[child_index].node;
         children_index_stack[stack_index] = 0;
@@ -1176,13 +1184,17 @@ alloc_lctrie4() {
 void
 free_trie4(LcTrie4* trie) {
     int i;
+    Node4* root;
 
     if (trie == NULL) {
         return;
     }
     
-    for(i = 0; i < 15; i++) {
-        free_node4(trie->root.next_nodes[i].node);
+    root = &trie->root;
+    for(i = 0; i < 16; i++) {
+        if (IS_NODE_CHILD_BIT_SET(root, i)) {
+            free_node4(root->next_nodes[i].node);
+        }
     }
 
     free(trie);
@@ -1214,7 +1226,7 @@ lctri4_insert_ip(LcTrie4* trie, uint32 ip, Value value) {
         node = node->next_nodes[next_four_bits].node;
     }
 
-    // Last iteration is done outside - to handle the leaf child
+    /* Last iteration is done outside - to handle the leaf child */
     next_four_bits = (ip & mask);
     node->next_nodes[next_four_bits].leaf = value;
     SET_NODE_CHILDREN_ARE_LEAVES(node);
@@ -1224,7 +1236,89 @@ lctri4_insert_ip(LcTrie4* trie, uint32 ip, Value value) {
 }
 
 
-bool lctri4_remove_ip(LcTrie4* trie, uint32 ip);
+
+static void
+shrink_path_with_4_bits(Node4** nodes_stack, uint16* bits_stack, int num_nodes) {
+    Node4* current_node;
+    int i;
+
+    for (i = num_nodes - 1; i > 0; i--) {
+        current_node = nodes_stack[i];
+        if (IS_ANY_CHILD_BIT_SET_EXCEPT(current_node, bits_stack[i]) || IS_ANY_SUBNET_BIT_SET(current_node)) {    
+            break;
+        }
+    }
+
+    current_node = nodes_stack[i];
+
+    if (IS_NODE_CHILDREN_ARE_NODES(current_node)) {
+        free_node4(current_node->next_nodes[bits_stack[i]].node);
+        current_node->next_nodes[bits_stack[i]].node = NULL;
+    }
+
+    CLEAR_NODE_CHILD_BIT(current_node, bits_stack[i]);
+}
+
+/*
+static void
+dbg_print_ip(uint32 ip) {
+    uint32 mask = FIRST_FOUR_BITS_ON;
+    int shift = 31;
+    
+    
+    printf("IP: ");
+    
+    while(mask) {
+        printf("%d", (ip & mask) >> shift);
+        
+        shift--;
+        mask >>= 1;
+    }
+    
+    printf("\n");
+}
+*/
+
+bool
+lctri4_remove_ip(LcTrie4* trie, uint32 ip) {
+    Node4* nodes_stack[8];
+    uint16 bits_stack[8];
+
+    Node4* current_node;
+
+    int i;
+    uint32 mask;
+    unsigned int next_four_bits;
+    
+    nodes_stack[0] = &trie->root;
+    bits_stack[0] = (ip & FIRST_FOUR_BITS_ON) >> 28;
+    
+    mask = FIRST_FOUR_BITS_ON >> 4;
+    for (i = 1; i < 8; i++, mask >>= 4) {
+        current_node = nodes_stack[i - 1];
+        next_four_bits = bits_stack[i - 1];
+
+        if (current_node->next_nodes[next_four_bits].node == NULL) {
+            return 0;
+        }
+
+        nodes_stack[i] = current_node->next_nodes[next_four_bits].node;
+        bits_stack[i] = (ip & mask) >> (28 - (i * 4));
+    }
+
+    current_node = nodes_stack[7];
+    next_four_bits = bits_stack[7];
+    
+    if (IS_ANY_CHILD_BIT_SET_EXCEPT(current_node, next_four_bits) || IS_ANY_SUBNET_BIT_SET(current_node)) {
+        /* There are more children or subnets, no need to shrink */
+        CLEAR_NODE_CHILD_BIT(current_node, next_four_bits);
+        return 1;
+    }
+
+    shrink_path_with_4_bits(nodes_stack, bits_stack, 7);
+
+    return 1;
+}
 
 Value lctri4_lookup_ip(LcTrie4* trie, uint32 ip);
 Value lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip);
@@ -1249,7 +1343,7 @@ print_node4(Node4* node, int depth, int bit) {
 
     if (IS_NODE_CHILDREN_ARE_LEAVES(node)) {
         
-        for (i = 0; i < 15; i++) {
+        for (i = 0; i < 16; i++) {
             if (IS_NODE_CHILD_BIT_SET(node, i)) {
                 printf("%d:", depth + 1);
                 print_ident(depth + 1);
@@ -1263,13 +1357,12 @@ print_node4(Node4* node, int depth, int bit) {
     print_ident(depth);
     printf("bit %d%d%d%d :\n",(bit >>3) %2, (bit >>2) %2, (bit >>1) %2, bit % 2);
 
-    for (i = 0; i < 15; i++) {
+    for (i = 0; i < 16; i++) {
         if (IS_NODE_CHILD_BIT_SET(node, i)) {
             print_node4(node->next_nodes[i].node, depth + 1, i);
         }
     }
 }  
-
 
 void
 print_lctrie4(LcTrie4* trie) {
