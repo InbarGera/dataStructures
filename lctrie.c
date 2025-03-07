@@ -1235,8 +1235,6 @@ lctri4_insert_ip(LcTrie4* trie, uint32 ip, Value value) {
     return 1;    
 }
 
-
-
 static void
 shrink_path_with_4_bits(Node4** nodes_stack, uint16* bits_stack, int num_nodes) {
     Node4* current_node;
@@ -1298,7 +1296,7 @@ lctri4_remove_ip(LcTrie4* trie, uint32 ip) {
         current_node = nodes_stack[i - 1];
         next_four_bits = bits_stack[i - 1];
 
-        if (current_node->next_nodes[next_four_bits].node == NULL) {
+        if (!IS_NODE_CHILD_BIT_SET(current_node, next_four_bits)) {
             return 0;
         }
 
@@ -1320,7 +1318,34 @@ lctri4_remove_ip(LcTrie4* trie, uint32 ip) {
     return 1;
 }
 
-Value lctri4_lookup_ip(LcTrie4* trie, uint32 ip);
+Value
+lctri4_lookup_ip(LcTrie4* trie, uint32 ip) {
+    Node4* node;
+    uint32 mask;
+    int required_shift;
+    unsigned int next_four_bits;
+
+    mask = FIRST_FOUR_BITS_ON;
+    required_shift = 28;
+    node = &trie->root;
+
+    for (; required_shift > 0; mask >>= 4, required_shift -= 4) {
+        next_four_bits = (ip & mask) >> required_shift;
+        if (!IS_NODE_CHILD_BIT_SET(node, next_four_bits)) {
+            return 0;
+        }
+
+        node = node->next_nodes[next_four_bits].node;
+    }
+
+    next_four_bits = (ip & mask);
+    if (IS_NODE_CHILD_BIT_SET(node, next_four_bits)) {
+        return node->next_nodes[next_four_bits].leaf;
+    }
+
+    return 0;
+}
+
 Value lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip);
 Value lctri4_lookup_ip_buttom_subnet(LcTrie4* trie, uint32 ip);
 
