@@ -1040,25 +1040,12 @@ print_all_lctrie2_subnets(LcTrie2* trie) {
 /* Static class variable */
 
 /* 
- * Mapping between simple index, and its bit (form right to left)
- *  LcTrie4_index_to_bit[i] <=> 0x1 << i
- */
-// TODO - might want ot implement it as operation instead of lookup (for performance)
-static uint16 LcTrie4_index_to_bit[16] = {
-    0x0001, 0x0002, 0x0004, 0x0008,
-    0x0010, 0x0020, 0x0040, 0x0080,
-    0x0100, 0x0200, 0x0400, 0x0800,
-    0x1000, 0x2000, 0x4000, 0x8000
-};
-
-/* 
- * Mapping between pair of nuber of bits and last bits, to the relevant bit in the subnet_bits bitmap
+ * Mapping between pair of number of bits and last bits, to the number of the bit in the subnet_bits bitmap
  * bits 0 - 2 are the subnet suffix in a node
  * bits 3 - 4 are the number of bits in the suffix
  * 
  * For example:
  * subnet bits are 01, then the number of bits is 2 (10 in binary) so the coresponds number last 5 bits are 10001
- *  
  */
 static uint16 LcTrie4_subnet_to_index[32] = {
          0, 0x0000, 0x0000, 0x0000, /* No extra bits - one entry */ 
@@ -1070,7 +1057,7 @@ static uint16 LcTrie4_subnet_to_index[32] = {
          3,     4,       5,      6, /* Two extra bits - four entries */
     0x0000, 0x0000, 0x0000, 0x0000,
     
-        7,      8,       0,     10, /* Three extra bits - all entries */
+        7,      8,       9,     10, /* Three extra bits - all entries */
        11,     12,      13,     14,
 };
 
@@ -1081,21 +1068,22 @@ static uint16 LcTrie4_subnet_to_index[32] = {
 #define SET_NODE_CHILDREN_ARE_LEAVES(node)  (node->subnet_bits |= 0x8000)
 #define SET_NODE_CHILDREN_ARE_NODES(node)   (node->subnet_bits &= 0x7fff)
 
-#define SET_NODE_CHILD_BIT(node, index)     (node->chilren_bits |= LcTrie4_index_to_bit[index])
-#define CLEAR_NODE_CHILD_BIT(node, index)   (node->chilren_bits &= ~LcTrie4_index_to_bit[index])
-#define IS_NODE_CHILD_BIT_SET(node, index)  (!!(node->chilren_bits & LcTrie4_index_to_bit[index]))
+#define SET_NODE_CHILD_BIT(node, index)     (node->chilren_bits |= (0x1 << index))
+#define CLEAR_NODE_CHILD_BIT(node, index)   (node->chilren_bits &= ~(0x1 << index))
+#define IS_NODE_CHILD_BIT_SET(node, index)  (!!(node->chilren_bits & (0x1 << index)))
 
 #define IS_ANY_SUBNET_BIT_SET(node)         (!!(node->subnet_bits & 0x7fff))
 #define IS_ANY_CHILD_BIT_SET(node)          (!!(node->chilren_bits))
 
-#define IS_ANY_CHILD_BIT_SET_EXCEPT(node, index) (!!(node->chilren_bits & ~(LcTrie4_index_to_bit[index])))
+#define IS_ANY_SUBNET_BIT_SET_EXCEPT(node, index)  (!!((node->subnet_bits & 0x7fff) & ~(0x1 << index)))
+#define IS_ANY_CHILD_BIT_SET_EXCEPT(node, index)   (!!(node->chilren_bits & ~(0x1 << index)))
 
 /* Utility for subnet macros */
 #define GET_SUBNET_INDEX(last_bits, num_last_bits) (LcTrie4_subnet_to_index[(num_last_bits << 3 | (last_bits & 0x7))])
 
-#define SET_NODE_SUBNET_BIT(node, index) (node->subnet_bits |= LcTrie4_index_to_bit[index])
-#define CLEAR_NODE_SUBNET_BIT(node, index)  (node->subnet_bits &= ~LcTrie4_index_to_bit[index])
-#define IS_NODE_SUBNET_BIT_SET(node, index) (!!(node->subnet_bits & LcTrie4_index_to_bit[index]))
+#define SET_NODE_SUBNET_BIT(node, index)    (node->subnet_bits |= (0x1 << index))
+#define CLEAR_NODE_SUBNET_BIT(node, index)  (node->subnet_bits &= ~(0x1 << index))
+#define IS_NODE_SUBNET_BIT_SET(node, index) (!!(node->subnet_bits & (0x1 << index)))
 
 typedef struct Node4 {
 
@@ -1435,7 +1423,67 @@ lctri4_insert_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits, Value v
     return 1;
 }
 
-bool lctri4_remove_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits);
+bool
+lctri4_remove_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits) {
+    Node4* nodes_stack[8];
+    uint16 bits_stack[8];
+
+    Node4* current_node;
+
+    int i;
+    int subnet_index;
+    int subnet_depth_in_node;
+    uint32 mask;
+    unsigned int next_four_bits;
+    
+    nodes_stack[0] = current_node = &trie->root;
+    bits_stack[0] = (ip & FIRST_FOUR_BITS_ON) >> 28;
+    
+    mask = FIRST_FOUR_BITS_ON >> 4;
+    for (i = 1; i*4 -1 < subnet_bits; i++, mask >>= 4) {
+        current_node = nodes_stack[i - 1];
+        next_four_bits = bits_stack[i - 1];
+
+        if (!IS_NODE_CHILD_BIT_SET(current_node, next_four_bits)) {
+            return 0;
+        }
+
+        nodes_stack[i] = current_node->next_nodes[next_four_bits].node;
+        bits_stack[i] = (ip & mask) >> (28 - (i * 4));
+    }
+
+    /* Revert last iteration */
+    i--;
+    mask <<= 4;
+
+    current_node = nodes_stack[i];
+    next_four_bits = bits_stack[i];
+    
+    /*
+    * Fetching the "number" of the subnet. 
+    * If no more bits are required, the it should be 0.
+    * If one bit is left, it should be the first relevant bit.
+    * If two bits are left, it should be the first two bits.
+    * If three bits are left, it should be the first three bits.
+    */
+    subnet_depth_in_node = subnet_bits - ((i) * 4);
+    next_four_bits = (ip & mask) >> ((28 - (i*4)) + (4 - subnet_depth_in_node));
+    subnet_index = GET_SUBNET_INDEX(next_four_bits, subnet_depth_in_node);
+
+    if (!IS_NODE_SUBNET_BIT_SET(current_node, subnet_index)) {
+        return 0;
+    }
+
+    if (IS_ANY_SUBNET_BIT_SET_EXCEPT(current_node, subnet_index) || IS_ANY_CHILD_BIT_SET(current_node)) {
+        CLEAR_NODE_SUBNET_BIT(current_node, subnet_index);
+        current_node->subnet_values[subnet_index] = 0; /* Not necessary */
+        return 1;
+    }
+
+    shrink_path_with_4_bits(nodes_stack, bits_stack, i);
+
+    return 1;
+}
 
 Value
 lctri4_lookup_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits) {
@@ -1485,7 +1533,7 @@ lctri4_lookup_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits) {
 
 /* Debugging functions for lctrie with 2 bits per node */
 
-static void
+/* static */ void
 print_node4(Node4* node, int depth, int bit) {
     int i;
     
