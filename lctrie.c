@@ -1086,7 +1086,7 @@ static uint16 LcTrie4_subnet_to_index[32] = {
        / \     / \         /   \      / \
      7    8    9   10     11   12    13  14      Subnet
     / \  / \  / \  / \   / \   / \  / \   / \ 
-    0  1 2  3 4  5 6  7 8  9 10 11 12 13 14 15   Next Nodes
+   0   1 2  3 4  5 6  7 8  9 10 11 12 13 14 15   Next Nodes
 
  */
 
@@ -1434,6 +1434,51 @@ lctri4_lookup_ip(LcTrie4* trie, uint32 ip) {
     return 0;
 }
 
+static Value
+lctri4_get_first_subnet_from_node(Node4* node, unsigned int next_four_bits, uint16 subnet_bits) {
+    uint16 subnet_bits_space;
+    uint16 space;
+    uint16 total_space;
+    
+    /* Assuming that if this function has been called, the subnet_bits is not empty */
+    /* Also, passing it to the function to save a second lookup of it */
+    
+    /* Searching through all 4 subnets */
+
+    /* Top subnet */
+    if (subnet_bits & 0x1) {
+        return node->subnet_values[0];
+    }
+
+    subnet_bits_space = GET_SUBNET_SPACE_FOR_NEXT_NODE(node, next_four_bits);
+
+    /* Second subnet */
+
+    total_space = subnet_bits_space & 0xf;
+    subnet_bits >>= total_space;
+
+    if (subnet_bits & 0x1) {
+        return node->subnet_values[total_space];
+    }
+
+    /* Third subnet */
+
+    space = (subnet_bits_space >> 4) & 0xf;
+    total_space += space;
+    subnet_bits >>= space;
+
+    if (subnet_bits & 0x1) {
+        return node->subnet_values[total_space];
+    }
+
+    /* Fourth subnet */
+
+    total_space += (subnet_bits_space >> 8) & 0xf;
+
+    /* If the logic is correct, the fourth one must be on, so no need to check it */
+    return node->subnet_values[total_space];
+}
+
 Value
 lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip) {
     Node4* node;
@@ -1441,9 +1486,6 @@ lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip) {
     int required_shift;
     unsigned int next_four_bits;
     uint16 subnet_bits;
-    uint16 subnet_bits_space;
-    uint16 space;
-    uint16 total_space;
 
     mask = FIRST_FOUR_BITS_ON;
     required_shift = 28;
@@ -1453,44 +1495,8 @@ lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip) {
         next_four_bits = (ip & mask) >> required_shift;
         
         subnet_bits = GET_SUBNET_BITS_FOR_NEXT_NODE(node, next_four_bits);
-
         if (subnet_bits) {
-            /* This node has at least one subnet that controls that ip in this path */
-
-            /* Searching through all 4 subnets */
-
-            /* Top subnet */
-            if (subnet_bits & 0x1) {
-                return node->subnet_values[0];
-            }
-
-            subnet_bits_space = GET_SUBNET_SPACE_FOR_NEXT_NODE(node, next_four_bits);
-
-            /* Second subnet */
-
-            total_space = subnet_bits_space & 0xf;
-            subnet_bits >>= total_space;
-
-            if (subnet_bits & 0x1) {
-                return node->subnet_values[total_space];
-            }
-
-            /* Third subnet */
-
-            space = (subnet_bits_space >> 4) & 0xf;
-            total_space += space;
-            subnet_bits >>= space;
-
-            if (subnet_bits & 0x1) {
-                return node->subnet_values[total_space];
-            }
-
-            /* Fourth subnet */
-
-            total_space += (subnet_bits_space >> 8) & 0xf;
-
-            /* If the logic is correct, the third one must be on, so no need to check it */
-            return node->subnet_values[total_space];
+            return lctri4_get_first_subnet_from_node(node, next_four_bits, subnet_bits);
         }
 
         /* No subnets in this node, continue to the next one */
@@ -1506,7 +1512,83 @@ lctri4_lookup_ip_top_subnet(LcTrie4* trie, uint32 ip) {
     return 0;
 }
 
-Value lctri4_lookup_ip_buttom_subnet(LcTrie4* trie, uint32 ip);
+Value
+lctri4_lookup_ip_buttom_subnet(LcTrie4* trie, uint32 ip) {
+    Node4* node;
+    uint32 mask;
+    int required_shift;
+    unsigned int next_four_bits;
+
+    Node4* last_node;
+    uint16 last_four_bits;
+
+    uint16 subnet_bits_space;
+    uint16 total_space;
+    uint16 subnet_bits;
+
+    mask = FIRST_FOUR_BITS_ON;
+    required_shift = 28;
+    node = &trie->root;
+
+    last_node = NULL;
+
+    for (; mask; mask >>= 4, required_shift -= 4) {
+        next_four_bits = (ip & mask) >> required_shift;
+        
+        if (GET_SUBNET_BITS_FOR_NEXT_NODE(node, next_four_bits)) {
+            /* Saving this node, in case it is the last in the way down */
+            last_node = node;
+            last_four_bits = next_four_bits;
+        }
+        
+        /* No subnets in this node, continue to the next one */
+        
+        if (!IS_NODE_CHILD_BIT_SET(node, next_four_bits)) {
+            /* No more nodes to go, go to end and get the last subnet if any found so far */
+            break;
+        }
+        
+        node = node->next_nodes[next_four_bits].node;
+    }
+
+    if (last_node == NULL) {
+        /* No subnet is found in the path */
+        return 0;
+    }
+
+    /* Getting the subnet from the last node that been found on the way */
+    /* Not encapsulating inside a function to save the function call */
+
+    subnet_bits = GET_SUBNET_BITS_FOR_NEXT_NODE(last_node, last_four_bits);
+    
+    /* Searching through all 4 subnets, last to first */
+
+    subnet_bits_space = GET_SUBNET_SPACE_FOR_NEXT_NODE(last_node, last_four_bits);
+
+    total_space = ((subnet_bits_space >> 8) & 0xf) + ((subnet_bits_space >> 4) & 0xf) + (subnet_bits_space & 0xf);
+
+    /* Fourth subnet */
+
+    if (subnet_bits >> total_space & 0x1) {
+        return last_node->subnet_values[total_space];
+    }
+
+    /* Third subnet */
+
+    total_space -= (subnet_bits_space >> 8) & 0xf;
+    if (subnet_bits >> total_space & 0x1) {
+        return last_node->subnet_values[total_space];
+    }
+
+    /* Second subnet */
+    total_space -= (subnet_bits_space >> 4) & 0xf;
+    if (subnet_bits >> total_space & 0x1) {
+        return last_node->subnet_values[total_space];
+    }
+
+    /* If the logic is correct, the first one must be on, so no need to check it */
+    return last_node->subnet_values[0];
+}
 
 bool
 lctri4_insert_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits, Value value) {

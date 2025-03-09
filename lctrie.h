@@ -114,7 +114,7 @@ bool lctri4_insert_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits, Va
 bool lctri4_remove_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits);
 Value lctri4_lookup_subnet(LcTrie4* trie, uint32 ip, unsigned int subnet_bits);
 
-/* Debugging functions for lctrie with 2 bits per node */
+/* Debugging functions for lctrie with 4 bits per node */
 
 void print_lctrie4(LcTrie4* trie);
 void print_all_lctrie4_ips(LcTrie4* trie);
