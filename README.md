@@ -3,6 +3,6 @@ Implementation of generic data structures.
 
 currently available:
 
-Trees:
+AVL Tree.
 
-AVL.
+LCTrie for ipv4.
